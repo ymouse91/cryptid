@@ -1,4 +1,33 @@
-const CACHE_NAME = 'cryptid-pwa-v1';
+const CACHE_NAME = 'cryptid-pwa-v2';
+
+const CORE_PRECACHE_URLS = [
+  './',
+  './index.html',
+  './cryptid.css',
+  './w3.css',
+  './lang_settings.js',
+  './manifest.webmanifest',
+  './img/favicon.png',
+  './img/apple-touch-icon.png',
+  './img/Cryptid_devil.png',
+  './img/Cryptid_Title.png',
+  './js/lib/jquery-3.3.1.min.js',
+  './js/lib/howler.min.js',
+  './js/lib/js.cookies.js',
+  './js/namespace.js',
+  './js/i18n.js',
+  './js/errors.js',
+  './js/mapData.js',
+  './js/mapRenderer.js',
+  './js/settings.js',
+  './js/sound.js',
+  './js/tutorial.js',
+  './js/gameGenerator.js',
+  './js/gameStore.js',
+  './js/game.js',
+  './js/sharing.js',
+  './js/app.js'
+];
 
 const PRECACHE_URLS = [
   './',
@@ -160,21 +189,25 @@ const PRECACHE_URLS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then((cache) => cache.addAll(CORE_PRECACHE_URLS))
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
+  const cleanup = caches.keys()
+    .then((keys) => Promise.all(
+      keys
+        .filter((key) => key !== CACHE_NAME)
+        .map((key) => caches.delete(key))
+    ))
+    .then(() => self.clients.claim());
+
   event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
+    cleanup
   );
+
+  cleanup.then(() => warmFullCache());
 });
 
 self.addEventListener('fetch', (event) => {
@@ -220,4 +253,11 @@ async function cacheFirst(request) {
   const response = await fetch(request);
   cache.put(request, response.clone());
   return response;
+}
+
+async function warmFullCache() {
+  const cache = await caches.open(CACHE_NAME);
+  await Promise.allSettled(
+    PRECACHE_URLS.map((url) => cache.add(url))
+  );
 }
