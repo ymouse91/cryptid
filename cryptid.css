@@ -22,6 +22,9 @@ html, body {
 canvas {
   margin: 16px auto 16px auto; }
 
+canvas.solo-map-clickable {
+  cursor: pointer; }
+
 #ytplayer-wrapper {
   position: relative;
   padding-bottom: 56.25%;
@@ -347,13 +350,34 @@ div.cryptid-lang-menu {
   flex-shrink: 0;
 }
 .player-badge-1 { background: #c0392b; }
-.player-badge-2 { background: #27ae60; }
-.player-badge-3 { background: #2980b9; }
+.player-badge-2 { background: #008f39; }
+.player-badge-3 { background: #0057b8; }
 .player-badge-4 { background: #e67e22; }
 .player-badge-5 { background: #8e44ad; }
 
 /* Cheat sheet */
 .cheat-icon { vertical-align: middle; flex-shrink: 0; }
+
+/* The quick-guide legend follows the active board artwork. */
+#cheatSheetDiv {
+	--cheat-water: #4488cc;
+	--cheat-mountain: #888888;
+	--cheat-forest: #4a9a4a;
+	--cheat-swamp: #7b52a8;
+	--cheat-desert: #d4b44a;
+}
+
+#cheatSheetDiv.solo-cheat-sheet {
+	--cheat-water: #6f9fdb;
+	--cheat-mountain: #c8cdd1;
+	--cheat-forest: #8fbd78;
+	--cheat-swamp: #6f5b79;
+	--cheat-desert: #ffdb59;
+}
+
+.solo-animal-icon { display: none; }
+#cheatSheetDiv.solo-cheat-sheet .standard-animal-icon { display: none; }
+#cheatSheetDiv.solo-cheat-sheet .solo-animal-icon { display: inline-block; }
 .cheat-legend-section { margin-bottom: 0.25em; }
 .cheat-legend-label { font-weight: bold; display: block; margin-bottom: 0.3em; }
 .cheat-legend-row { display: flex; flex-wrap: wrap; gap: 0.4em 1em; align-items: center; }
@@ -362,3 +386,94 @@ div.cryptid-lang-menu {
 .cheat-clue-list { margin: 0.2em 0 0 1.4em; padding: 0; list-style: disc; }
 .cheat-clue-list li { padding: 1px 0; line-height: 1.4; }
 .cheat-section-title { font-weight: bold; font-size: 0.95em; text-transform: uppercase; letter-spacing: 0.05em; color: #444; margin-bottom: 0.5em; padding-bottom: 0.25em; border-bottom: 1px solid #ccc; }
+
+/* Solo AI panel */
+.solo-ai-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.6em;
+}
+.solo-ai-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+.solo-ai-controls select,
+.solo-ai-controls input {
+  width: 100%;
+  padding: 0.35em;
+}
+.solo-ai-answer {
+  border-left: 4px solid #777;
+  padding: 0.65em 0.8em;
+  background: rgba(255, 255, 255, 0.45);
+  font-weight: bold;
+}
+
+.solo-human-controls {
+  border-top: 1px solid rgba(0, 0, 0, 0.18);
+  padding-top: 12px;
+}
+
+.solo-human-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.solo-human-buttons button {
+  flex: 1;
+}
+
+.solo-player-radio-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.solo-player-radio-group label,
+.solo-search-toggle {
+  white-space: nowrap;
+}
+
+.solo-player-accessible {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.solo-game-status {
+  padding: 10px;
+  font-weight: bold;
+}
+
+.solo-status-win {
+  background: #d4edda;
+  color: #155724;
+}
+
+.solo-status-error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.solo-status-neutral {
+  background: #e2e3e5;
+  color: #383d41;
+}
+.solo-ai-answer + .solo-ai-answer { margin-top: 0.45em; }
+.solo-ai-yes { border-left-color: #2f8f46; }
+.solo-ai-no { border-left-color: #b33a3a; }
+.solo-ai-error { border-left-color: #c28b00; }
+
+@media (max-width: 520px) {
+  .solo-ai-controls {
+    grid-template-columns: 1fr;
+  }
+}

@@ -98,10 +98,12 @@ function switchLanguage(langCodeInput) {
 
     $('.lang-drop').val(effectiveCode);
 
-    // Update cookie consent text if it has been rendered
-    $('.cc-message').html(translateString('cookie_consent_message'));
-    $('.cc-dismiss').text(translateString('cookie_consent_deny'));
-    $('.cc-allow').text(translateString('cookie_consent_allow'));
+    // Update legacy cookie consent text only if that optional banner exists.
+    if ($('.cc-message').length && langData.cookie_consent_message) {
+      $('.cc-message').html(translateString('cookie_consent_message'));
+      $('.cc-dismiss').text(translateString('cookie_consent_deny'));
+      $('.cc-allow').text(translateString('cookie_consent_allow'));
+    }
 
     prevCode = langCode;
   }

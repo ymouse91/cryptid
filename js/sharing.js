@@ -326,10 +326,10 @@ function findTarget(mapKey, rules) {
 /**
  * Parse URL query parameters.
  *
- * @returns {{lang:string|null, game:string|null, player:string|null}}
+ * @returns {{lang:string|null, game:string|null, player:string|null, solo:string|null}}
  */
 function parseUrlParams() {
-  const result = { lang: null, game: null, player: null };
+  const result = { lang: null, game: null, player: null, solo: null };
   const search = window.location.search.substring(1);
   if (!search) return result;
 
@@ -365,6 +365,7 @@ function setUrlParam(key, value) {
   if (current.lang)   parts.push('lang='   + encodeURIComponent(current.lang));
   if (current.game)   parts.push('game='   + encodeURIComponent(current.game));
   if (current.player) parts.push('player=' + encodeURIComponent(current.player));
+  if (current.solo)   parts.push('solo='   + encodeURIComponent(current.solo));
 
   const search = parts.length ? '?' + parts.join('&') : '';
   window.history.replaceState({}, document.title, window.location.pathname + search);
@@ -505,7 +506,10 @@ function applyUrlParams() {
   if (params.game) {
     const decoded = decodeGame(params.game);
     if (decoded) {
-      window.cryptid.game.loadFromSharedCode(decoded, params.player || null);
+      const localSoloDefault = !params.solo && window.cryptid.settings &&
+        window.cryptid.settings.get('solo') === true && decoded.playerCount === 4;
+      const soloRequested = params.solo === '1' || localSoloDefault;
+      window.cryptid.game.loadFromSharedCode(decoded, params.player || null, soloRequested);
     }
   }
 }

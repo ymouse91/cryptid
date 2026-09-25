@@ -41,6 +41,7 @@ function GameController() {
   let currentGame     = undefined;  // GameRecord currently in play
   let playerCount;
   let isIntro;
+  let soloMode;
   let showHints;
   let keepMap;
   let gameStore;
@@ -48,6 +49,16 @@ function GameController() {
   let storeFilled     = false;
   let clueReminderState = 0;        // Tracks reminder FSM state
   let _shareFormat    = 'short';    // 'short' | 'obfuscated' | 'plain'
+  let selectedSoloHex = null;
+  let soloPhase       = 'setup';    // 'setup' | 'turns'
+  let soloAction      = 'question'; // 'question' | 'search'
+  let soloSetupCount  = 0;
+  let soloPendingPlacement = null;  // 'question_cube' | 'search_cube' | null
+  let soloPendingOrigin = null;
+  let soloActivePlayer = 1;
+  let soloAiTurnCount = { 2: 0, 3: 0, 4: 0 };
+  let soloSetupAiBusy = false;
+  const SOLO_MOVE_DELAY = 900;
 
   const errMgr = new ErrorManager();
 
@@ -79,6 +90,8 @@ function GameController() {
   this.getIntro      = function () { return isIntro; };
   this.setIntro      = function (v) { if (typeof v === 'boolean') isIntro = v; };
   this.toggleIntro   = function () { isIntro = !isIntro; };
+  this.getSolo       = function () { return soloMode; };
+  this.setSolo       = function (v) { if (typeof v === 'boolean') soloMode = v; };
   this.getHint       = function () { return showHints; };
   this.setHint       = function (v) { if (typeof v === 'boolean') showHints = v; };
   this.toggleHint    = function () { showHints = !showHints; };
@@ -114,6 +127,7 @@ function GameController() {
     const self = this;
 
     this.setPlayers(players);
+    this.setSolo(false);
     this.setIntro(!advanced);
     this.setKeepMap(keep);
     this.setHint(hint);
@@ -177,6 +191,10 @@ function GameController() {
 
   /** Read current settings into the controller state. */
   this.harvestSettings = function () {
+    this.setSolo(window.cryptid.settings.get('solo'));
+    if (soloMode) {
+      window.cryptid.settings.set('players', 4);
+    }
     this.setPlayers(window.cryptid.settings.get('players'));
     this.setHint(true);
     this.setIntro(!window.cryptid.settings.get('advanced'));
@@ -221,6 +239,14 @@ function GameController() {
         newGame = gameStore.getRandomGame(this.getMode(), this.getPlayers());
       }
 
+      // When the user asked for a fresh map, avoid showing the exact same
+      // solo board twice in a row if the random pool happens to return it.
+      if (soloMode && !this.getKeepMap() && currentGame && newGame && newGame.key === currentGame.key) {
+        for (let retry = 0; retry < 4 && newGame.key === currentGame.key; retry += 1) {
+          newGame = gameStore.getRandomGame(this.getMode(), this.getPlayers());
+        }
+      }
+
       currentGame = newGame;
     }
 
@@ -231,7 +257,7 @@ function GameController() {
     $('.game-gameplay').show();
     $('.game-start').hide();
 
-    window.cryptid.map.newMapSettings(currentGame.key, !isIntro, currentSetup.target);
+    window.cryptid.map.newMapSettings(currentGame.key, !isIntro, currentSetup.target, soloMode);
     window.cryptid.map.expandMap();
 
     $(SEL_REMINDER_DIV).hide();
@@ -242,10 +268,15 @@ function GameController() {
     $(SEL_HINT_DIV).hide();
     $(SEL_CHEAT_DIV).hide();
     $('#playerClueDiv').hide();
+    $('#soloAiDiv').hide();
 
     clueReminderState = 0;
     this.clueDisplaying = 0;
-    this.startReminderMode();
+    if (soloMode) {
+      this.startSoloMode();
+    } else {
+      this.startReminderMode();
+    }
 
     // Collapse share options from any prior game and reset format to default
     _shareFormat = 'short';
@@ -261,6 +292,7 @@ function GameController() {
       currentSetup[0].rules
     );
     window.cryptid.sharing.setUrlParam('game', gameCode);
+    window.cryptid.sharing.setUrlParam('solo', soloMode ? '1' : null);
 
     window.cryptid.myTut.showStep(3);
     gameActive = true;
@@ -474,6 +506,11 @@ function GameController() {
     $('#targetConfirm').show();
   };
 
+  /** Keep the reveal control available and make it visible after a win. */
+  this.showHabitatReveal = function () {
+    $(SEL_TARGET_DIV).stop(true, true).slideDown();
+  };
+
   /** Reveal the target on the map and show all clues. */
   this.targetShow = function () {
     const parts = currentSetup[0].destination.split(',');
@@ -483,6 +520,7 @@ function GameController() {
     window.cryptid.map.drawTarget(col, row);
     $(SEL_TARGET_DIV).slideUp();
     $(SEL_REMINDER_DIV).slideUp();
+    $('#soloAiDiv').slideUp();
     this.revealClues();
     window.cryptid.map.expandMap();
     $('html, body').animate(
@@ -559,14 +597,23 @@ function GameController() {
    *
    * @param {{mapKey:string, mode:string, playerCount:number, rules:string[], hint:string}} decoded
    * @param {string|null} playerSpec - '1'–'5', '12', '34', or null (reminder mode).
+   * @param {boolean} soloRequested - Restore the solo game UI on reload.
    */
-  this.loadFromSharedCode = function (decoded, playerSpec) {
+  this.loadFromSharedCode = function (decoded, playerSpec, soloRequested) {
     playerCount = decoded.playerCount;
     isIntro     = (decoded.mode === 'intro');
     showHints   = true;
     keepMap     = false;
+    this.setSolo(soloRequested === true);
 
-    currentGame  = { key: decoded.mapKey, mode: decoded.mode };
+    // Shared/reloaded games do not have a GameRecord pool, but they still
+    // carry enough of the map key to honour "keep the same map" after the
+    // user ends the game and starts another one.
+    currentGame  = {
+      key: decoded.mapKey,
+      mapCode: decoded.mapKey.replace(/^intro_/, ''),
+      mode: decoded.mode
+    };
     currentSetup = [{
       rules:       decoded.rules,
       destination: window.cryptid.sharing.findTarget(decoded.mapKey, decoded.rules),
@@ -589,6 +636,7 @@ function GameController() {
     $(SEL_HINT_DIV).hide();
     $(SEL_CHEAT_DIV).hide();
     $('#playerClueDiv').hide();
+    $('#soloAiDiv').hide();
     $('#shareOptions').hide();
     $('#shareBtn').data('tkey', 'share_show_options');
     translateElement($('#shareBtn'));
@@ -596,7 +644,9 @@ function GameController() {
     clueReminderState = 0;
     gameActive = true;
 
-    if (playerSpec) {
+    if (soloRequested === true && !playerSpec) {
+      this.startSoloMode();
+    } else if (playerSpec) {
       this.showPlayerView(playerSpec);
     } else {
       this.startReminderMode();
@@ -646,10 +696,14 @@ function GameController() {
     }
     translateElement(header);
 
-    // Populate clue text but keep it hidden — button reveals it
-    $('#playerClueText').html(clueHtml).hide();
+    // In solo mode the human's clue is never passed to the AI, so keep it
+    // visible throughout the game. Shared and pass-the-device views retain
+    // the normal reveal button to protect the active player's clue.
+    const keepSoloHumanClueVisible = soloMode === true && spec === '1';
+    $('#playerClueText').html(clueHtml).toggle(keepSoloHumanClueVisible);
 
     const btn = $('#playerClueBtn');
+    btn.toggle(!keepSoloHumanClueVisible);
     let btnBadgeHtml;
     if (spec === '12') {
       btnBadgeHtml = playerBadge(1) + playerBadge(2);
@@ -697,12 +751,594 @@ function GameController() {
    * Includes a button to switch to pass-the-device mode.
    */
   this.startReminderMode = function () {
+    window.cryptid.map.setHexClickHandler(null);
+    $('#mapCanvas').removeClass('solo-map-clickable');
+    selectedSoloHex = null;
+    soloPendingPlacement = null;
+    soloPendingOrigin = null;
+    $('#soloSetupDiv, #soloTurnDiv').hide();
+    $('#soloAiDiv').hide();
     this.resetReminder();
     this.createClueReminders();
     $(SEL_TARGET_DIV).slideDown();
     this.showHint();
     this.showCheatSheet();
     $('#passTheDeviceBtn').show();
+  };
+
+  /** Start the solo game with the rulebook's initial sharing phase. */
+  this.startSoloMode = function () {
+    const self = this;
+    playerCount = 4;
+    selectedSoloHex = null;
+    soloPhase = 'setup';
+    soloAction = 'question';
+    soloSetupCount = 0;
+    soloPendingPlacement = null;
+    soloPendingOrigin = null;
+    soloActivePlayer = 1;
+    soloAiTurnCount = { 2: 0, 3: 0, 4: 0 };
+    soloSetupAiBusy = false;
+    $('#mapCanvas').addClass('solo-map-clickable');
+    $('#passTheDeviceBtn').hide();
+    $(SEL_REMINDER_DIV).hide();
+    $(SEL_TARGET_DIV).show();
+    this.showHint();
+    this.showPlayerView(1);
+    this.showSoloAiPanel();
+    $('input[name="soloTurnChoice"]').off('change').on('change', function () {
+      self.setSoloAction(this.value === 'search' ? 'search' : 'question');
+    });
+    window.cryptid.map.setHexClickHandler(function (col, row) {
+      self.handleSoloHexClick(col, row);
+    });
+    this.showSoloSetup();
+  };
+
+  /** Show and reset the solo AI response panel. */
+  this.showSoloAiPanel = function () {
+    $('#soloAiResult').empty();
+    $('#soloHumanDiv').hide();
+    $('#soloGameStatus').empty();
+    $('#soloAiDiv').slideDown();
+  };
+
+  function soloRulesContext() {
+    const boardState = buildBoardState(currentGame.key);
+    const allStructs = parseStructures(currentGame.key);
+    const structs = currentGame.key.startsWith('intro_')
+      ? allStructs.filter(function (s) { return s.color !== 'black'; })
+      : allStructs;
+    return { boardState: boardState, structs: structs };
+  }
+
+  function soloMarkerAt(col, row, player) {
+    return window.cryptid.map.getPlayerMarkers().find(function (marker) {
+      return marker.col === col && marker.row === row && marker.player === player;
+    });
+  }
+
+  function soloHasCube(col, row) {
+    return window.cryptid.map.getPlayerMarkers().some(function (marker) {
+      return marker.col === col && marker.row === row && marker.type === 'cube';
+    });
+  }
+
+  function soloIsValidHex(col, row) {
+    return getAllHexes().some(function (hex) {
+      return hex.col === col && hex.row === row;
+    });
+  }
+
+  function soloClueMatches(col, row, player) {
+    const context = soloRulesContext();
+    return hexSatisfiesClue(
+      col,
+      row,
+      currentSetup[0].rules[player - 1],
+      context.boardState,
+      context.structs
+    );
+  }
+
+  function soloSetStatus(selector, key, className, player) {
+    const text = typeof player === 'number'
+      ? translateString(key, player)
+      : translateString(key, null);
+    $(selector)
+      .attr('class', 'w3-margin-top solo-game-status ' + className)
+      .text(text);
+  }
+
+  function soloSetSelection(col, row) {
+    selectedSoloHex = { col: col, row: row };
+    $('#soloHumanSelection').text(
+      translateString('solo_human_selection', null)
+        .replace('?c?', col)
+        .replace('?r?', row)
+    );
+  }
+
+  /** Display the two-cube initial sharing instructions. */
+  this.showSoloSetup = function () {
+    $('#soloSetupDiv').show();
+    $('#soloTurnDiv').hide();
+    $('#soloHumanDiv').hide();
+    $('#soloHumanDiscBtn').hide();
+    $('#soloHumanCubeBtn').show();
+    $('#soloHumanSelection').empty();
+    soloSetStatus('#soloSetupStatus', 'solo_setup_status', 'solo-status-neutral');
+    soloSetStatus('#soloGameStatus', 'solo_setup_prompt', 'solo-status-neutral');
+  };
+
+  /** Handle a board click according to the current solo phase and action. */
+  this.handleSoloHexClick = function (col, row) {
+    if (soloActivePlayer !== 1) return;
+    if (soloPhase === 'setup') {
+      if (soloSetupAiBusy) return;
+      soloSetSelection(col, row);
+      soloPlaceSetupCube();
+      return;
+    }
+    if (soloPendingPlacement) {
+      soloSetSelection(col, row);
+      soloSetStatus('#soloTurnStatus', 'solo_place_different_cube', 'solo-status-neutral');
+      this.placeSoloMarker('cube');
+      return;
+    }
+    this.selectSoloTurnHex(col, row);
+  };
+
+  /** Select the requested hex for a question or a search. */
+  this.selectSoloTurnHex = function (col, row) {
+    if (!soloIsValidHex(col, row) || soloHasCube(col, row)) {
+      soloSetStatus('#soloTurnStatus', 'solo_invalid_cube_hex', 'solo-status-error');
+      return;
+    }
+    soloSetSelection(col, row);
+    if (soloAction === 'search') {
+      this.performSoloSearch(col, row);
+    } else {
+      this.performSoloQuestion(col, row);
+    }
+  };
+
+  /** Choose question or search for the human player's next turn. */
+  this.setSoloAction = function (action) {
+    if (soloPhase !== 'turns') return;
+    if (soloActivePlayer !== 1) return;
+    if (soloPendingPlacement) {
+      $('input[name="soloTurnChoice"][value="' + (soloAction === 'search' ? 'search' : '2') + '"]').prop('checked', true);
+      return;
+    }
+    soloAction = action === 'search' ? 'search' : 'question';
+    soloPendingPlacement = null;
+    $('#soloHumanDiv').hide();
+    $('#soloQuestionRadioGroup').show();
+    const instructionKey = soloAction === 'search' ? 'solo_turn_search_help' : 'solo_turn_question_help';
+    $('#soloTurnInstruction').data('tkey', instructionKey).attr('data-tkey', instructionKey);
+    translateElement($('#soloTurnInstruction'));
+    soloSetStatus(
+      '#soloTurnStatus',
+      soloAction === 'search' ? 'solo_select_search_hex' : 'solo_select_question_hex',
+      'solo-status-neutral'
+    );
+  };
+
+  function soloAiResultHtml(player, matches) {
+    const answerClass = matches ? 'solo-ai-yes' : 'solo-ai-no';
+    const answerText = translateString(matches ? 'solo_ai_answer_yes' : 'solo_ai_answer_no', null);
+    return '<div class="solo-ai-answer ' + answerClass + '">' +
+      playerBadge(player) + translateString('solo_ai_player_name', player) + ': ' + answerText +
+    '</div>';
+  }
+
+  function soloAddAiMarker(col, row, player, matches) {
+    if (!soloMarkerAt(col, row, player)) {
+      window.cryptid.map.addPlayerMarker(col, row, player, matches ? 'disc' : 'cube');
+    }
+  }
+
+  function soloChooseHex(predicate) {
+    return getAllHexes().find(function (hex) {
+      return !soloHasCube(hex.col, hex.row) && predicate(hex);
+    });
+  }
+
+  /**
+   * Choose a cube location that leaks as little information as possible.
+   * A cube proves that this player's clue is false at the chosen hex, so the
+   * best public move is the one that leaves the largest number of that
+   * player's clue candidates possible. Randomising ties avoids a visible
+   * left-to-right placement pattern when several spaces are equivalent.
+   *
+   * @param {number} player
+   * @param {{col:number,row:number}=} excludedHex - Hex being questioned/search
+   * @returns {{col:number,row:number}|null}
+   */
+  function soloChooseAiCube(player, excludedHex) {
+    const possible = soloPossibleClues(player);
+    let bestScore = -1;
+    let bestHexes = [];
+
+    getAllHexes().forEach(function (candidate) {
+      if (soloHasCube(candidate.col, candidate.row) ||
+          soloMarkerAt(candidate.col, candidate.row, player) ||
+          (excludedHex && candidate.col === excludedHex.col && candidate.row === excludedHex.row) ||
+          soloClueMatches(candidate.col, candidate.row, player)) {
+        return;
+      }
+
+      const remainingClues = possible.filter(function (clue) {
+        return !soloClueMatchesForKey(candidate.col, candidate.row, clue);
+      }).length;
+
+      if (remainingClues > bestScore) {
+        bestScore = remainingClues;
+        bestHexes = [candidate];
+      } else if (remainingClues === bestScore) {
+        bestHexes.push(candidate);
+      }
+    });
+
+    if (!bestHexes.length) return null;
+    return bestHexes[Math.floor(Math.random() * bestHexes.length)];
+  }
+
+  /** Return the clue catalogue available in the current game mode. */
+  function soloCluePool() {
+    return isIntro ? INTRO_CLUES : ADVANCED_CLUES;
+  }
+
+  /**
+   * Infer which clues are still possible for a player from their public pieces.
+   * The AI never reads another player's hidden clue; it only uses public evidence.
+   */
+  function soloPossibleClues(player) {
+    const context = soloRulesContext();
+    const markers = window.cryptid.map.getPlayerMarkers().filter(function (marker) {
+      return marker.player === player;
+    });
+    return soloCluePool().filter(function (clue) {
+      return markers.every(function (marker) {
+        const matches = hexSatisfiesClue(
+          marker.col,
+          marker.row,
+          clue,
+          context.boardState,
+          context.structs
+        );
+        return marker.type === 'disc' ? matches : !matches;
+      });
+    });
+  }
+
+  /** Choose a question that best splits the target player's possible clues. */
+  function soloChooseAiQuestion(player) {
+    const targets = [1, 2, 3, 4].filter(function (candidate) {
+      return candidate !== player;
+    });
+    targets.sort(function (a, b) {
+      return soloPossibleClues(b).length - soloPossibleClues(a).length;
+    });
+    const target = targets[0];
+    const possible = soloPossibleClues(target);
+    let bestHex = null;
+    let bestScore = -1;
+
+    getAllHexes().forEach(function (hex) {
+      if (soloHasCube(hex.col, hex.row) || soloMarkerAt(hex.col, hex.row, target)) return;
+      const trueCount = possible.filter(function (clue) {
+        return soloClueMatchesForKey(hex.col, hex.row, clue);
+      }).length;
+      const falseCount = possible.length - trueCount;
+      const splitScore = Math.min(trueCount, falseCount);
+      if (splitScore > bestScore) {
+        bestScore = splitScore;
+        bestHex = hex;
+      }
+    });
+
+    return { target: target, hex: bestHex || soloChooseHex(function () { return true; }) };
+  }
+
+  function soloClueMatchesForKey(col, row, clue) {
+    const context = soloRulesContext();
+    return hexSatisfiesClue(col, row, clue, context.boardState, context.structs);
+  }
+
+  /** Choose a legal search hex with the strongest public evidence. */
+  function soloChooseAiSearchHex(player) {
+    const opponents = [1, 2, 3, 4].filter(function (candidate) {
+      return candidate !== player;
+    });
+    let bestHex = null;
+    let bestScore = -1;
+    getAllHexes().forEach(function (hex) {
+      if (soloHasCube(hex.col, hex.row) || soloMarkerAt(hex.col, hex.row, player)) return;
+      if (!soloClueMatches(hex.col, hex.row, player)) return;
+      let score = 0;
+      opponents.forEach(function (opponent) {
+        const possible = soloPossibleClues(opponent);
+        if (possible.some(function (clue) {
+          return soloClueMatchesForKey(hex.col, hex.row, clue);
+        })) {
+          score += 1;
+        }
+      });
+      if (score > bestScore) {
+        bestScore = score;
+        bestHex = hex;
+      }
+    });
+    return bestHex;
+  }
+
+  function soloSetActivePlayerControls(enabled) {
+    $('#soloQuestionRadioGroup').toggle(enabled);
+    $('input[name="soloTurnChoice"]').prop('disabled', !enabled);
+    if (!enabled) $('#soloHumanDiv').hide();
+  }
+
+  /** Move from the completed turn to the next player in clockwise order. */
+  this.advanceSoloTurn = function () {
+    soloActivePlayer = soloActivePlayer === 4 ? 1 : soloActivePlayer + 1;
+    if (soloActivePlayer === 1) {
+      soloSetActivePlayerControls(true);
+      this.setSoloAction($('input[name="soloTurnChoice"]:checked').val() === 'search' ? 'search' : 'question');
+      return;
+    }
+
+    soloSetActivePlayerControls(false);
+    soloSetStatus('#soloTurnStatus', 'solo_ai_turn', 'solo-status-neutral', soloActivePlayer);
+    window.setTimeout(function () {
+      window.cryptid.game.playSoloAiTurn(soloActivePlayer);
+    }, 650);
+  };
+
+  /** Let an AI player take a complete question or search turn. */
+  this.playSoloAiTurn = function (player) {
+    if (soloPhase !== 'turns' || soloActivePlayer !== player) return;
+    soloAiTurnCount[player] += 1;
+    if (soloAiTurnCount[player] % 3 === 0) {
+      this.performSoloAiSearch(player);
+    } else {
+      this.performSoloAiQuestion(player);
+    }
+  };
+
+  /** AI question: ask the next player and handle a forced cube. */
+  this.performSoloAiQuestion = function (player) {
+    const choice = soloChooseAiQuestion(player);
+    const target = choice.target;
+    const hex = choice.hex;
+    if (!hex) {
+      soloSetStatus('#soloTurnStatus', 'solo_ai_turn_no_options', 'solo-status-error');
+      this.advanceSoloTurn();
+      return;
+    }
+
+    const matches = soloClueMatches(hex.col, hex.row, target);
+    soloAddAiMarker(hex.col, hex.row, target, matches);
+    const questionText = translateString('solo_ai_turn_question', player)
+      .replace('?q?', translateString('player_' + target, null));
+    let html = '<div class="solo-ai-answer solo-status-neutral">' +
+      playerBadge(player) + questionText + '</div>' + soloAiResultHtml(target, matches);
+
+    let cubeHex = null;
+    if (!matches) {
+      cubeHex = soloChooseAiCube(player, hex);
+    }
+    $('#soloAiResult').html(html);
+    if (cubeHex) {
+      window.setTimeout(function () {
+        window.cryptid.map.addPlayerMarker(cubeHex.col, cubeHex.row, player, 'cube');
+        html += '<div class="solo-ai-answer solo-ai-no">' +
+          playerBadge(player) + translateString('solo_ai_player_name', player) + ': ' +
+          translateString('solo_ai_forced_cube', null) + '</div>';
+        $('#soloAiResult').html(html);
+        soloSetStatus('#soloTurnStatus', 'solo_ai_turn_complete', 'solo-status-neutral');
+        window.setTimeout(function () { window.cryptid.game.advanceSoloTurn(); }, SOLO_MOVE_DELAY);
+      }, SOLO_MOVE_DELAY);
+    } else {
+      soloSetStatus('#soloTurnStatus', 'solo_ai_turn_complete', 'solo-status-neutral');
+      window.setTimeout(function () { window.cryptid.game.advanceSoloTurn(); }, SOLO_MOVE_DELAY);
+    }
+  };
+
+  /** AI search: place a disc, then ask the other players in order. */
+  this.performSoloAiSearch = function (player) {
+    const hex = soloChooseAiSearchHex(player);
+    if (!hex) {
+      soloSetStatus('#soloTurnStatus', 'solo_ai_turn_no_options', 'solo-status-error');
+      this.advanceSoloTurn();
+      return;
+    }
+
+    window.cryptid.map.addPlayerMarker(hex.col, hex.row, player, 'disc');
+    const results = [
+      '<div class="solo-ai-answer solo-status-neutral">' +
+      playerBadge(player) + translateString('solo_ai_turn_search', player) + '</div>'
+    ];
+    function showNextAnswer(offset) {
+      const target = ((player - 1 + offset) % 4) + 1;
+      const existing = soloMarkerAt(hex.col, hex.row, target);
+      const matches = existing ? existing.type === 'disc' : soloClueMatches(hex.col, hex.row, target);
+      if (!existing) soloAddAiMarker(hex.col, hex.row, target, matches);
+      results.push(soloAiResultHtml(target, matches));
+      $('#soloAiResult').html(results.join(''));
+      if (!matches) {
+        const cubeHex = soloChooseAiCube(player, hex);
+        if (cubeHex) {
+          window.setTimeout(function () {
+            window.cryptid.map.addPlayerMarker(cubeHex.col, cubeHex.row, player, 'cube');
+            results.push('<div class="solo-ai-answer solo-ai-no">' +
+              playerBadge(player) + translateString('solo_ai_forced_cube', null) + '</div>');
+            $('#soloAiResult').html(results.join(''));
+            soloSetStatus('#soloTurnStatus', 'solo_ai_turn_complete', 'solo-status-neutral');
+            window.setTimeout(function () { window.cryptid.game.advanceSoloTurn(); }, SOLO_MOVE_DELAY);
+          }, SOLO_MOVE_DELAY);
+        } else {
+          soloSetStatus('#soloTurnStatus', 'solo_ai_turn_complete', 'solo-status-neutral');
+          window.setTimeout(function () { window.cryptid.game.advanceSoloTurn(); }, SOLO_MOVE_DELAY);
+        }
+        return;
+      }
+      if (offset < 3) {
+        window.setTimeout(function () { showNextAnswer(offset + 1); }, SOLO_MOVE_DELAY);
+      } else {
+        soloSetStatus('#soloTurnStatus', 'solo_ai_win', 'solo-status-win', player);
+        window.cryptid.game.showHabitatReveal();
+      }
+    }
+    window.setTimeout(function () { showNextAnswer(1); }, SOLO_MOVE_DELAY);
+  };
+
+  /** Let each AI player place one initial cube after the human's cube. */
+  function soloPlaceAiSetupCubes(done) {
+    const players = [2, 3, 4];
+    let index = 0;
+    soloSetupAiBusy = true;
+    function placeNext() {
+      if (index >= players.length) {
+        soloSetupAiBusy = false;
+        if (done) done();
+        return;
+      }
+      const player = players[index];
+      index += 1;
+      const hex = soloChooseAiCube(player);
+      if (hex) {
+        window.cryptid.map.addPlayerMarker(hex.col, hex.row, player, 'cube');
+      }
+      window.setTimeout(placeNext, SOLO_MOVE_DELAY);
+    }
+    placeNext();
+  }
+
+  /** Place one of the human player's two initial cubes. */
+  function soloPlaceSetupCube() {
+    if (!selectedSoloHex) return;
+    const col = selectedSoloHex.col;
+    const row = selectedSoloHex.row;
+    if (!soloIsValidHex(col, row) || soloHasCube(col, row)) {
+      soloSetStatus('#soloSetupStatus', 'solo_invalid_cube_hex', 'solo-status-error');
+      return;
+    }
+    if (soloClueMatches(col, row, 1)) {
+      soloSetStatus('#soloSetupStatus', 'solo_setup_disc_required', 'solo-status-error');
+      return;
+    }
+    window.cryptid.map.addPlayerMarker(col, row, 1, 'cube');
+    soloSetupCount += 1;
+    soloPlaceAiSetupCubes(function () {
+      if (soloSetupCount < 2) {
+        soloSetStatus('#soloSetupStatus', 'solo_setup_second_cube', 'solo-status-neutral');
+        soloSetStatus('#soloGameStatus', 'solo_setup_second_cube', 'solo-status-neutral');
+      } else {
+        soloPhase = 'turns';
+        $('#soloSetupDiv').hide();
+        $('#soloTurnDiv').show();
+        $('#soloHumanDiv').hide();
+        // A previous AI turn may have disabled the radio group. The human
+        // player owns the first turn after setup, so explicitly unlock it.
+        soloSetActivePlayerControls(true);
+        $('input[name="soloTurnChoice"][value="2"]').prop('checked', true);
+        soloSetStatus('#soloTurnStatus', 'solo_turn_ready', 'solo-status-neutral');
+        window.cryptid.game.setSoloAction('question');
+      }
+      selectedSoloHex = null;
+    });
+  }
+
+  /** Resolve a question: ask one AI and enforce the cube consequence. */
+  this.performSoloQuestion = function (col, row) {
+    const player = parseInt($('input[name="soloTurnChoice"]:checked').val(), 10);
+    const matches = soloClueMatches(col, row, player);
+    soloAddAiMarker(col, row, player, matches);
+    $('#soloAiResult').html(soloAiResultHtml(player, matches));
+    if (matches) {
+      soloPendingPlacement = null;
+      soloPendingOrigin = null;
+      $('#soloHumanDiv').hide();
+      soloSetStatus('#soloTurnStatus', 'solo_question_disc', 'solo-status-neutral');
+      window.setTimeout(function () { window.cryptid.game.advanceSoloTurn(); }, 900);
+    } else {
+      soloPendingPlacement = 'question_cube';
+      soloPendingOrigin = { col: col, row: row };
+      $('#soloHumanDiv').hide();
+      soloSetStatus('#soloTurnStatus', 'solo_place_different_cube', 'solo-status-neutral');
+    }
+  };
+
+  /** Resolve a search, stopping immediately when an AI places a cube. */
+  this.performSoloSearch = function (col, row) {
+    if (!soloClueMatches(col, row, 1)) {
+      soloSetStatus('#soloTurnStatus', 'solo_search_needs_disc', 'solo-status-error');
+      return;
+    }
+    if (soloMarkerAt(col, row, 1)) {
+      soloSetStatus('#soloTurnStatus', 'solo_own_marker_exists', 'solo-status-error');
+      return;
+    }
+
+    window.cryptid.map.addPlayerMarker(col, row, 1, 'disc');
+    const results = [];
+    function showNextSearchAnswer(index) {
+      const player = [2, 3, 4][index];
+      const existing = soloMarkerAt(col, row, player);
+      const matches = existing ? existing.type === 'disc' : soloClueMatches(col, row, player);
+      if (!existing) soloAddAiMarker(col, row, player, matches);
+      results.push(soloAiResultHtml(player, matches));
+      $('#soloAiResult').html(results.join(''));
+
+      if (!matches) {
+        soloPendingPlacement = 'search_cube';
+        soloPendingOrigin = { col: col, row: row };
+        $('#soloHumanDiv').hide();
+        soloSetStatus('#soloTurnStatus', 'solo_search_stopped', 'solo-status-neutral');
+        return;
+      }
+      if (index < 2) {
+        window.setTimeout(function () { showNextSearchAnswer(index + 1); }, SOLO_MOVE_DELAY);
+      } else {
+        soloPendingPlacement = null;
+        soloPendingOrigin = null;
+        $('#soloHumanDiv').hide();
+        soloSetStatus('#soloTurnStatus', 'solo_win', 'solo-status-win');
+        window.cryptid.game.showHabitatReveal();
+      }
+    }
+    window.setTimeout(function () { showNextSearchAnswer(0); }, SOLO_MOVE_DELAY);
+  };
+
+  /** Complete a required human cube placement or the initial sharing. */
+  this.placeSoloMarker = function (markerType) {
+    if (!selectedSoloHex || !currentGame || !currentSetup || !currentSetup[0]) return;
+    if (soloPhase === 'setup') {
+      soloPlaceSetupCube();
+      return;
+    }
+    if (!soloPendingPlacement || markerType !== 'cube') return;
+
+    const col = selectedSoloHex.col;
+    const row = selectedSoloHex.row;
+    const isOrigin = soloPendingOrigin && soloPendingOrigin.col === col && soloPendingOrigin.row === row;
+    if (isOrigin || !soloIsValidHex(col, row) || soloHasCube(col, row) || soloMarkerAt(col, row, 1)) {
+      soloSetStatus('#soloTurnStatus', 'solo_invalid_cube_hex', 'solo-status-error');
+      return;
+    }
+    if (soloClueMatches(col, row, 1)) {
+      soloSetStatus('#soloTurnStatus', 'solo_cube_needs_negative', 'solo-status-error');
+      return;
+    }
+    window.cryptid.map.addPlayerMarker(col, row, 1, 'cube');
+    soloPendingPlacement = null;
+    soloPendingOrigin = null;
+    selectedSoloHex = null;
+    $('#soloHumanDiv').hide();
+    soloSetStatus('#soloTurnStatus', 'solo_cube_placed', 'solo-status-neutral');
+    window.setTimeout(function () { window.cryptid.game.advanceSoloTurn(); }, 900);
   };
 
   /**
@@ -856,6 +1492,7 @@ function GameController() {
   // -------------------------------------------------------------------------
 
   this.showCheatSheet = function () {
+    $(SEL_CHEAT_DIV).toggleClass('solo-cheat-sheet', soloMode === true);
     $(SEL_CHEAT_DIV).slideDown();
   };
 

@@ -121,14 +121,15 @@ $(document).ready(function () {
   // 9. Tutorial
   const tutSteps = [];
   tutSteps.push(new TutorialNode('tut_node_0', 0, 1, false, true));
-  tutSteps.push(new TutorialNode('tut_node_1', 0, 2, false, true));
-  tutSteps.push(new TutorialNode('tut_node_2', 1, 0, true,  false));
-  tutSteps.push(new TutorialNode('tut_node_3', 2, 4, false, true));
+  tutSteps.push(new TutorialNode('tut_node_1', 0, 2, false, false));
+  tutSteps.push(new TutorialNode('tut_node_2', 1, 3, false, false));
+  tutSteps.push(new TutorialNode('tut_node_3', 2, 4, false, false));
   tutSteps.push(new TutorialNode('tut_node_4', 3, 5, false, false));
-  tutSteps.push(new TutorialNode('tut_node_5', 4, 6, true,  false));
-  tutSteps.push(new TutorialNode('tut_node_6', 0, 6, true,  true));
-  tutSteps.push(new TutorialNode('tut_node_7', 0, 8, false, true));
-  tutSteps.push(new TutorialNode('tut_node_8', 7, 0, true,  false));
+  tutSteps.push(new TutorialNode('tut_node_5', 4, 6, false, false));
+  tutSteps.push(new TutorialNode('tut_node_6', 5, 7, false, false));
+  tutSteps.push(new TutorialNode('tut_node_7', 6, 8, false, false));
+  tutSteps.push(new TutorialNode('tut_node_8', 7, 9, false, false));
+  tutSteps.push(new TutorialNode('tut_node_9', 8, 0, true, false));
 
   window.cryptid.myTut = new TutorialController(
     tutSteps,

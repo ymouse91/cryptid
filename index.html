@@ -4,12 +4,19 @@
 		<title>Cryptid</title>
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<link href="https://fonts.googleapis.com/css?family=Alegreya" rel="stylesheet">
+		<meta name="theme-color" content="#1f5f5b">
+		<meta name="description" content="A browser-based companion app for the Cryptid board game.">
+		<meta name="mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-title" content="Cryptid">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+		<link rel="manifest" href="manifest.webmanifest">
+		<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 		<link rel="stylesheet" href="w3.css">
 		<link rel="stylesheet" href="cryptid.css">
 		<style>
 			.w3-alegreya {
-				font-family: 'Alegreya', serif;
+				font-family: Georgia, 'Times New Roman', serif;
 				font-variant: small-caps;
 				letter-spacing: 3px;
 			}
@@ -19,20 +26,27 @@
 		<script src="js/lib/js.cookies.js"></script>
 		<script src="lang_settings.js"></script>
 		<!-- Cryptid modules (replaces cryptid.3.min.js) -->
-	<script src="js/namespace.js"></script>
-	<script src="js/i18n.js"></script>
-	<script src="js/errors.js"></script>
-	<script src="js/mapData.js"></script>
-	<script src="js/mapRenderer.js"></script>
-	<script src="js/settings.js"></script>
-	<script src="js/sound.js"></script>
-	<script src="js/tutorial.js"></script>
-	<script src="js/gameGenerator.js"></script>
-	<script src="js/gameStore.js"></script>
-	<script src="js/game.js"></script>
-	<script src="js/sharing.js"></script>
-	<script src="js/app.js"></script>
+	<script src="js/namespace.js?v=20260923-3"></script>
+	<script src="js/i18n.js?v=20260923-3"></script>
+	<script src="js/errors.js?v=20260923-3"></script>
+	<script src="js/mapData.js?v=20260923-4"></script>
+	<script src="js/mapRenderer.js?v=20260924-1"></script>
+	<script src="js/settings.js?v=20260923-4"></script>
+	<script src="js/sound.js?v=20260923-3"></script>
+	<script src="js/tutorial.js?v=20260923-3"></script>
+	<script src="js/gameGenerator.js?v=20260923-3"></script>
+	<script src="js/gameStore.js?v=20260923-3"></script>
+	<script src="js/game.js?v=20260924-2"></script>
+	<script src="js/sharing.js?v=20260923-6"></script>
+	<script src="js/app.js?v=20260923-5"></script>
 		<link rel="icon" type="image/png" href="./img/favicon.png">
+		<script>
+			if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+				window.addEventListener('load', function () {
+					navigator.serviceWorker.register('./sw.js');
+				});
+			}
+		</script>
 	</head>
     <body class="cryptid-background">
 	<!-- MOBILE SIDE MENU -->
@@ -218,6 +232,59 @@
 						</div>
 					</div>
 
+					<!-- Solo setup phase -->
+					<div id="soloSetupDiv" class="w3-card cryptid-cream w3-margin-bottom cryptid-hide">
+						<div class="w3-left-align">
+							<h4 class="cryptid-title w3-alegreya w3-padding-small" data-tkey="solo_setup_title"></h4>
+						</div>
+						<div class="w3-padding w3-left-align">
+							<p class="w3-small" data-tkey="solo_setup_help"></p>
+							<div id="soloSetupStatus" class="solo-game-status solo-status-neutral" aria-live="polite"></div>
+						</div>
+					</div>
+
+					<!-- Solo turn controls -->
+					<div id="soloTurnDiv" class="w3-card cryptid-cream w3-margin-bottom cryptid-hide">
+						<div class="w3-left-align">
+							<h4 class="cryptid-title w3-alegreya w3-padding-small" data-tkey="solo_turn_title"></h4>
+						</div>
+						<div class="w3-padding w3-left-align">
+							<p id="soloTurnInstruction" class="w3-small" data-tkey="solo_turn_question_help"></p>
+							<div id="soloQuestionRadioGroup" class="solo-player-radio-group w3-margin-bottom">
+								<span class="w3-small" data-tkey="solo_turn_question_player"></span>
+								<label><input type="radio" name="soloTurnChoice" value="2" checked> <span class="player-badge player-badge-2" aria-hidden="true">β</span><span class="solo-player-accessible" data-tkey="player_2"></span></label>
+								<label><input type="radio" name="soloTurnChoice" value="3"> <span class="player-badge player-badge-3" aria-hidden="true">γ</span><span class="solo-player-accessible" data-tkey="player_3"></span></label>
+								<label><input type="radio" name="soloTurnChoice" value="4"> <span class="player-badge player-badge-4" aria-hidden="true">δ</span><span class="solo-player-accessible" data-tkey="player_4"></span></label>
+								<label class="solo-search-toggle">
+									<input id="soloSearchMode" type="radio" name="soloTurnChoice" value="search">
+								<span data-tkey="solo_turn_search_checkbox"></span>
+							</label>
+							</div>
+							<div id="soloTurnStatus" class="w3-margin-top solo-game-status solo-status-neutral" aria-live="polite"></div>
+						</div>
+					</div>
+
+					<!-- Solo AI response panel -->
+					<div id="soloAiDiv" class="w3-card cryptid-cream w3-margin-bottom cryptid-hide">
+						<div class="w3-left-align">
+							<h4 class="cryptid-title w3-alegreya w3-padding-small" data-tkey="solo_ai_title"></h4>
+						</div>
+						<div class="w3-padding w3-left-align">
+							<p class="w3-small" data-tkey="solo_ai_help"></p>
+							<div id="soloAiResult" class="w3-margin-top"></div>
+							<div id="soloHumanDiv" class="solo-human-controls cryptid-hide w3-margin-top">
+								<strong data-tkey="solo_human_title"></strong>
+								<p class="w3-small" data-tkey="solo_human_help"></p>
+								<div id="soloHumanSelection" class="w3-small w3-margin-bottom"></div>
+								<div class="solo-human-buttons">
+									<button id="soloHumanDiscBtn" class="w3-button w3-green" onclick="window.cryptid.game.placeSoloMarker('disc')" data-tkey="solo_human_disc"></button>
+									<button id="soloHumanCubeBtn" class="w3-button w3-blue-grey" onclick="window.cryptid.game.placeSoloMarker('cube')" data-tkey="solo_human_cube"></button>
+								</div>
+								<div id="soloGameStatus" class="w3-margin-top" aria-live="polite"></div>
+							</div>
+						</div>
+					</div>
+
 					<!-- Cheat Sheet -->
 					<div id="cheatSheetDiv" class="w3-card cryptid-cream w3-margin-bottom cryptid-hide">
 						<div class="w3-left-align">
@@ -233,18 +300,18 @@
 									<div class="cheat-legend-section">
 										<span class="w3-small cheat-legend-label" data-tkey="cheat_legend_terrain"></span>
 										<div class="cheat-legend-row">
-											<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="#4488cc"/></svg><span class="w3-small" data-tkey="cheat_terrain_water"></span></span>
-											<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="#888888"/></svg><span class="w3-small" data-tkey="cheat_terrain_mountain"></span></span>
-											<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="#4a9a4a"/></svg><span class="w3-small" data-tkey="cheat_terrain_forest"></span></span>
-											<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="#7b52a8"/></svg><span class="w3-small" data-tkey="cheat_terrain_swamp"></span></span>
-											<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="#d4b44a"/></svg><span class="w3-small" data-tkey="cheat_terrain_desert"></span></span>
+										<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="var(--cheat-water)" class="cheat-terrain-icon"/></svg><span class="w3-small" data-tkey="cheat_terrain_water"></span></span>
+										<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="var(--cheat-mountain)" class="cheat-terrain-icon"/></svg><span class="w3-small" data-tkey="cheat_terrain_mountain"></span></span>
+										<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="var(--cheat-forest)" class="cheat-terrain-icon"/></svg><span class="w3-small" data-tkey="cheat_terrain_forest"></span></span>
+										<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="var(--cheat-swamp)" class="cheat-terrain-icon"/></svg><span class="w3-small" data-tkey="cheat_terrain_swamp"></span></span>
+										<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="0 0 10 8.66" width="28" height="24"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="var(--cheat-desert)" class="cheat-terrain-icon"/></svg><span class="w3-small" data-tkey="cheat_terrain_desert"></span></span>
 										</div>
 									</div>
 									<div class="cheat-legend-section w3-margin-top">
 										<span class="w3-small cheat-legend-label" data-tkey="cheat_legend_animal"></span>
 										<div class="cheat-legend-row">
-											<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="-0.7 -0.7 11.4 10.06" width="50" height="43"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="none" stroke="#cc2222" stroke-width="1.2"/></svg><span class="w3-small" data-tkey="cheat_animal_cougar"></span></span>
-											<span class="cheat-legend-item"><svg class="cheat-icon" viewBox="-0.7 -0.7 11.4 10.06" width="50" height="43"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="none" stroke="#111111" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg><span class="w3-small" data-tkey="cheat_animal_bear"></span></span>
+											<span class="cheat-legend-item"><svg class="cheat-icon standard-animal-icon" viewBox="-0.7 -0.7 11.4 10.06" width="50" height="43"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="none" stroke="#cc2222" stroke-width="1.2"/></svg><svg class="cheat-icon solo-animal-icon" viewBox="0 0 20 20" width="42" height="42" aria-hidden="true"><ellipse cx="10" cy="13" rx="4.2" ry="3.2" fill="#c62828" stroke="white" stroke-width="0.9"/><circle cx="5.5" cy="7.2" r="1.45" fill="#c62828" stroke="white" stroke-width="0.75"/><circle cx="8.5" cy="5.9" r="1.45" fill="#c62828" stroke="white" stroke-width="0.75"/><circle cx="11.5" cy="5.9" r="1.45" fill="#c62828" stroke="white" stroke-width="0.75"/><circle cx="14.5" cy="7.2" r="1.45" fill="#c62828" stroke="white" stroke-width="0.75"/></svg><span class="w3-small" data-tkey="cheat_animal_cougar"></span></span>
+											<span class="cheat-legend-item"><svg class="cheat-icon standard-animal-icon" viewBox="-0.7 -0.7 11.4 10.06" width="50" height="43"><polygon points="2.5,0 7.5,0 10,4.33 7.5,8.66 2.5,8.66 0,4.33" fill="none" stroke="#111111" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg><svg class="cheat-icon solo-animal-icon" viewBox="0 0 20 20" width="42" height="42" aria-hidden="true"><ellipse cx="10" cy="13" rx="4.2" ry="3.2" fill="#202020" stroke="white" stroke-width="0.9"/><circle cx="5.5" cy="7.2" r="1.45" fill="#202020" stroke="white" stroke-width="0.75"/><circle cx="8.5" cy="5.9" r="1.45" fill="#202020" stroke="white" stroke-width="0.75"/><circle cx="11.5" cy="5.9" r="1.45" fill="#202020" stroke="white" stroke-width="0.75"/><circle cx="14.5" cy="7.2" r="1.45" fill="#202020" stroke="white" stroke-width="0.75"/></svg><span class="w3-small" data-tkey="cheat_animal_bear"></span></span>
 										</div>
 									</div>
 									<div class="cheat-legend-section w3-margin-top">
@@ -450,6 +517,13 @@
 								</div>
 								<div class="w3-card w3-yellow w3-margin-bottom w3-padding cryptid-hide" id="twoPlayerWarn">
 									<span data-tkey="two_player_warn"></span>
+								</div>
+								<div class="w3-margin-bottom">
+									<label class="switch cryptid-valign-middle w3-margin-right">
+										<input type="checkbox" id="ngfSolo" data-setting="solo">
+										<span class="slider round"></span>
+									</label>
+									<label id="ngfSoloLabel" for="ngfSolo" data-tkey="new_solo_label"></label>
 								</div>
 								<div class="w3-margin-bottom">
 									<label class="switch cryptid-valign-middle w3-margin-right">

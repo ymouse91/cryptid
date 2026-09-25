@@ -65,6 +65,15 @@ const TILE_IMAGES = {
   ],
 };
 
+// Solo mode uses cleaned copies of the compact mobile tiles. The regular
+// mobile tiles remain unchanged because their orientation dots are useful
+// when setting up a physical game.
+TILE_IMAGES.soloMobile = TILE_IMAGES.mobile.map(function (src) {
+  return src.match(/\/\d+\.png$/)
+    ? src.replace('/mobile/', '/solo-mobile/')
+    : src;
+});
+
 /**
  * Structure image paths indexed by breakpoint.
  * Index 0 = standing stones array (s1–s4), index 1 = shacks array (p1–p4).

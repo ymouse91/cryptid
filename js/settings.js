@@ -13,6 +13,7 @@ const Settings = function () {
     gameLimit: 20,
     tutorial: false,
     players: 4,
+    solo: true,
     advanced: false,
     bgm: false,
     sfx: false,
@@ -21,6 +22,16 @@ const Settings = function () {
   };
 
   this.settings = Cookies.getJSON('cryptid-settings') || this.defaults;
+  // Migrate existing installs to the new solo-first default once. Users can
+  // still turn solo mode off afterward and that choice will be preserved.
+  if (!this.settings.soloDefaultApplied) {
+    this.settings.solo = true;
+    this.settings.soloDefaultApplied = true;
+    Cookies.set('cryptid-settings', this.settings, { expires: 730 });
+  }
+  if (!langs[this.settings.lang]) {
+    this.settings.lang = 'en';
+  }
   this.listeners = {};
 
   const self = this;
@@ -45,9 +56,17 @@ const Settings = function () {
     }
   });
 
+  this.listen('solo', function (enabled) {
+    $('#ngfPlayers').prop('disabled', enabled);
+    if (enabled && self.get('players') != 4) {
+      self.set('players', 4);
+    }
+  });
+
   // Trigger player and language listeners with current values on init
   const initialPlayers = this.get('players');
   this.set('players', initialPlayers);
+  this.set('solo', this.get('solo'));
   this.set('lang', this.get('lang'));
 };
 

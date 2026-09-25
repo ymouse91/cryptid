@@ -30,6 +30,12 @@ Visit the hosted site, select your player count and mode, and press **Start**. P
 
 To run locally, just open `index.html` in a browser — no build step or server required.
 
+## PWA and offline use
+
+The app includes a web app manifest, installable icons, and a service worker. When served over HTTPS, such as from GitHub Pages, it can be installed as a PWA and keeps the game UI, scripts, images, PDFs, and sounds available offline after the first successful load.
+
+Deployments are handled by the GitHub Pages workflow in `.github/workflows/pages.yml`.
+
 ---
 
 ## Disclaimers and attribution
